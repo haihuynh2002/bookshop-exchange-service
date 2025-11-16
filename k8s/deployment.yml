@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: exchange-service
+  labels:
+    app: exchange-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: exchange-service
+  template:
+    metadata:
+      labels:
+        app: exchange-service
+    spec:
+      containers:
+        - name: exchange-service
+          image: exchange-service
+          imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                command: [ "sh", "-c", "sleep 5" ]
+          ports:
+            - containerPort: 9009
+          volumeMounts:
+            - name: exchange-config-volume
+              mountPath: /workspace/config
+      volumes:
+        - name: exchange-config-volume
+          configMap:
+            name: exchange-config
