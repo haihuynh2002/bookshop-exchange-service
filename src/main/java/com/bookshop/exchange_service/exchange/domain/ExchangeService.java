@@ -49,11 +49,17 @@ public class ExchangeService {
     @Transactional
     public Mono<Exchange> createExchange(ExchangeRequest request, Flux<FilePart> imageFile, Jwt jwt) {
         return exchangeRepository.findByOrderId(request.getOrderId())
-                .switchIfEmpty(Mono.defer(() -> createNewExchange(request, jwt)))
-                .flatMap(existingExchange -> updateExistingExchange(existingExchange, jwt))
-                .flatMap(exchangeRepository::save)
-                .flatMap(exchange -> uploadExchangeImage(imageFile, exchange.getId())
-                        .thenReturn(exchange));
+                .flatMap(existingExchange -> updateExistingExchange(existingExchange, request, imageFile))
+                .switchIfEmpty(Mono.defer(() -> createNewExchange(request, imageFile, jwt)));
+    }
+
+    private Mono<Exchange> updateExistingExchange(Exchange exchange, ExchangeRequest request, Flux<FilePart> imageFile) {
+        var updateRequest = ExchangeUpdateRequest.builder()
+                .reason(request.getReason())
+                .condition(request.getCondition())
+                .status(ExchangeStatus.PENDING)
+                .build();
+        return updateExchange(exchange.getId(), updateRequest, imageFile);
     }
 
     @Transactional
@@ -90,13 +96,16 @@ public class ExchangeService {
                 });
     }
 
-    private Mono<Exchange> createNewExchange(ExchangeRequest request, Jwt jwt) {
+    private Mono<Exchange> createNewExchange(ExchangeRequest request, Flux<FilePart> imageFile, Jwt jwt) {
         return Mono.fromCallable(() -> {
             Exchange exchange = exchangeMapper.toExchange(request);
             setUserDetailsFromJwt(exchange, jwt);
             exchange.setStatus(ExchangeStatus.PENDING);
             return exchange;
-        });
+        })
+                .flatMap(exchangeRepository::save)
+                .flatMap(exchange -> uploadExchangeImage(imageFile, exchange.getId())
+                        .thenReturn(exchange));
     }
 
     private Mono<Exchange> updateExistingExchange(Exchange exchange, Jwt jwt) {
